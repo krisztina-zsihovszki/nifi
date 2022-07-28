@@ -45,7 +45,7 @@ import java.util.Properties;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@DisabledOnJre(value = JRE.JAVA_17, disabledReason = "Hive3 StringInternUtils illegal reflective access")
+//@DisabledOnJre(value = JRE.JAVA_17, disabledReason = "Hive3 StringInternUtils illegal reflective access")
 public class TestNiFiRecordSerDe {
 
     @Test

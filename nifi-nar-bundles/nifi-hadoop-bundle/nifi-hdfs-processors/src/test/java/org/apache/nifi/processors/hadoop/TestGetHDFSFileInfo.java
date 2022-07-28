@@ -17,6 +17,7 @@
 package org.apache.nifi.processors.hadoop;
 
 import com.google.common.collect.Maps;
+import java.nio.charset.StandardCharsets;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -325,6 +326,52 @@ public class TestGetHDFSFileInfo {
     }
 
     @Test
+    public void testOriginalContentKeptInSuccess() throws Exception {
+
+        setFileSystemBasicTree(proc.fileSystem);
+
+        runner.setIncomingConnection(true);
+        runner.setProperty(GetHDFSFileInfo.FULL_PATH, "/some/home/mydir/regFile4");
+        runner.setProperty(GetHDFSFileInfo.RECURSE_SUBDIRS, "false");
+        runner.setProperty(GetHDFSFileInfo.IGNORE_DOTTED_DIRS, "true");
+        runner.setProperty(GetHDFSFileInfo.IGNORE_DOTTED_FILES, "true");
+        runner.setProperty(GetHDFSFileInfo.GROUPING, GetHDFSFileInfo.GROUP_NONE);
+        runner.setProperty(GetHDFSFileInfo.DESTINATION, GetHDFSFileInfo.DESTINATION_ATTRIBUTES_ORIG_CONTENT);
+        runner.enqueue("foo", new HashMap<String,String>());
+        runner.run();
+
+        runner.assertTransferCount(GetHDFSFileInfo.REL_ORIGINAL, 1);
+        runner.assertTransferCount(GetHDFSFileInfo.REL_SUCCESS, 1);
+        runner.assertTransferCount(GetHDFSFileInfo.REL_FAILURE, 0);
+        runner.assertTransferCount(GetHDFSFileInfo.REL_NOT_FOUND, 0);
+
+        final MockFlowFile mff = runner.getFlowFilesForRelationship(GetHDFSFileInfo.REL_SUCCESS).get(0);
+        mff.assertAttributeEquals("hdfs.type", "file");
+        mff.assertContentEquals("foo".getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void testSuccessResultForFileAndAllGrouping() throws InterruptedException {
+
+        setFileSystemBasicTree(proc.fileSystem);
+
+        runner.setIncomingConnection(true);
+        runner.setProperty(GetHDFSFileInfo.FULL_PATH, "/some/home/mydir/regFile4");
+        runner.setProperty(GetHDFSFileInfo.RECURSE_SUBDIRS, "false");
+        runner.setProperty(GetHDFSFileInfo.IGNORE_DOTTED_DIRS, "true");
+        runner.setProperty(GetHDFSFileInfo.IGNORE_DOTTED_FILES, "true");
+        runner.setProperty(GetHDFSFileInfo.GROUPING, GetHDFSFileInfo.GROUP_ALL);
+        runner.setProperty(GetHDFSFileInfo.DESTINATION, GetHDFSFileInfo.DESTINATION_ATTRIBUTES);
+        runner.enqueue("foo", new HashMap<String,String>());
+        runner.run();
+
+        runner.assertTransferCount(GetHDFSFileInfo.REL_ORIGINAL, 1);
+        runner.assertTransferCount(GetHDFSFileInfo.REL_SUCCESS, 1);
+        runner.assertTransferCount(GetHDFSFileInfo.REL_FAILURE, 0);
+        runner.assertTransferCount(GetHDFSFileInfo.REL_NOT_FOUND, 0);
+    }
+
+    @Test
     public void testRecursive() throws InterruptedException {
 
         setFileSystemBasicTree(proc.fileSystem);
@@ -348,6 +395,9 @@ public class TestGetHDFSFileInfo {
     public void testRecursiveGroupAllToAttributes() throws Exception {
 
         setFileSystemBasicTree(proc.fileSystem);
+
+        Map<String, String> attributes = Maps.newHashMap();
+        attributes.put("input.dir", "/some/home/mydir");
 
         runner.setIncomingConnection(false);
         runner.setProperty(GetHDFSFileInfo.FULL_PATH, "/some/home/mydir");

@@ -55,6 +55,7 @@ import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
+import org.apache.nifi.processors.hadoop.GetHDFSFileInfo.HDFSFileInfoRequest.Destination;
 
 import static org.apache.nifi.processors.hadoop.GetHDFSFileInfo.HDFSFileInfoRequest.Grouping.ALL;
 import static org.apache.nifi.processors.hadoop.GetHDFSFileInfo.HDFSFileInfoRequest.Grouping.DIR;
@@ -199,13 +200,18 @@ public class GetHDFSFileInfo extends AbstractHadoopProcessor {
     static final AllowableValue DESTINATION_CONTENT = new AllowableValue("gethdfsfileinfo-dest-content", "Content",
             "Details of given HDFS object will be stored in a content in JSON format");
 
+    static final AllowableValue DESTINATION_ATTRIBUTES_ORIG_CONTENT = new AllowableValue("gethdfsfileinfo-dest-attr-orig-content", "Attributes with Original Flowfile Content",
+            "Details of given HDFS object will be stored in attributes of flowfile, content will be the the content of the original flow file. "
+                    + "WARNING: In case when scan finds thousands or millions of objects, having huge values in attribute could impact flow file repo and GC/heap usage. "
+                    + "Use content destination for such cases.");
+
     public static final PropertyDescriptor DESTINATION = new PropertyDescriptor.Builder()
             .displayName("Destination")
             .name("gethdfsfileinfo-destination")
             .description("Sets the destination for the resutls. When set to 'Content', attributes of flowfile won't be used for storing results. ")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .allowableValues(DESTINATION_ATTRIBUTES, DESTINATION_CONTENT)
+            .allowableValues(DESTINATION_ATTRIBUTES, DESTINATION_CONTENT, DESTINATION_ATTRIBUTES_ORIG_CONTENT)
             .defaultValue(DESTINATION_CONTENT.getValue())
             .build();
 
@@ -446,7 +452,7 @@ public class GetHDFSFileInfo extends AbstractHadoopProcessor {
             final HDFSObjectInfoDetails o,
             final boolean isRoot
     ) {
-        if (o.isFile() && req.getGrouping() != NONE) {
+        if (o.isFile() && req.getGrouping() != NONE && !isRoot) {
             return;
         }
         if (o.isDirectory() && o.isSymlink() && req.getGrouping() != NONE) {
@@ -456,7 +462,7 @@ public class GetHDFSFileInfo extends AbstractHadoopProcessor {
             return;
         }
 
-        FlowFile ff = getReadyFlowFile(executionContext, session, origFF);
+        FlowFile ff = getReadyFlowFile(executionContext, session, origFF, req);
 
         //if destination type is content - always add mime type
         if (req.isDestContent()) {
@@ -512,9 +518,14 @@ public class GetHDFSFileInfo extends AbstractHadoopProcessor {
         finishProcessing(req, executionContext, session);
     }
 
-    private FlowFile getReadyFlowFile(ExecutionContext executionContext, ProcessSession session, FlowFile origFF) {
+    private FlowFile getReadyFlowFile(ExecutionContext executionContext, ProcessSession session, FlowFile origFF,
+            HDFSFileInfoRequest req) {
         if (executionContext.flowfile == null) {
-            executionContext.flowfile = session.create(origFF);
+            if (req.getDestination() == Destination.ATTRIBUTES_WITH_ORIGINAL_CONTENT) {
+                executionContext.flowfile = session.clone(origFF);
+            } else {
+                executionContext.flowfile = session.create(origFF);
+            }
         }
 
         return executionContext.flowfile;
@@ -611,9 +622,7 @@ public class GetHDFSFileInfo extends AbstractHadoopProcessor {
         req.setGrouping(HDFSFileInfoRequest.Grouping.getEnum(context.getProperty(GROUPING).getValue()));
         req.setBatchSize(context.getProperty(BATCH_SIZE).asInteger() != null ? context.getProperty(BATCH_SIZE).asInteger() : 1);
 
-        v = context.getProperty(DESTINATION).getValue();
-
-        req.setDestContent(DESTINATION_CONTENT.getValue().equals(v));
+        req.setDestination(Destination.getEnum(context.getProperty(DESTINATION).getValue()));
 
         return req;
     }
@@ -664,6 +673,31 @@ public class GetHDFSFileInfo extends AbstractHadoopProcessor {
             }
         }
 
+        enum Destination {
+            ATTRIBUTES(DESTINATION_ATTRIBUTES.getValue()),
+            ATTRIBUTES_WITH_ORIGINAL_CONTENT(DESTINATION_ATTRIBUTES_ORIG_CONTENT.getValue()),
+            CONTENT(DESTINATION_CONTENT.getValue());
+
+            final private String val;
+
+            Destination(String val) {
+                this.val = val;
+            }
+
+            public static Destination getEnum(String value) {
+                for (Destination v : values()) {
+                    if (v.val.equals(value)) {
+                        return v;
+                    }
+                }
+                return null;
+            }
+
+            public String toString() {
+                return this.val;
+            }
+        }
+
         private String fullPath;
         private boolean recursive;
         private Pattern dirFilter;
@@ -671,7 +705,7 @@ public class GetHDFSFileInfo extends AbstractHadoopProcessor {
         private Pattern fileExcludeFilter;
         private boolean ignoreDotFiles;
         private boolean ignoreDotDirs;
-        private boolean destContent;
+        private Destination destination;
         private Grouping grouping;
         private int batchSize;
 
@@ -732,11 +766,15 @@ public class GetHDFSFileInfo extends AbstractHadoopProcessor {
         }
 
         boolean isDestContent() {
-            return this.destContent;
+            return this.destination == Destination.CONTENT;
         }
 
-        void setDestContent(boolean destContent) {
-            this.destContent = destContent;
+        void setDestination(Destination destination) {
+            this.destination = destination;
+        }
+
+        Destination getDestination() {
+            return this.destination;
         }
 
         Grouping getGrouping() {

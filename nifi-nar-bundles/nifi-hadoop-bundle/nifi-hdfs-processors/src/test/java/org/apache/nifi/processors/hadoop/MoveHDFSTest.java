@@ -212,6 +212,23 @@ public class MoveHDFSTest {
     }
 
     @Test
+    public void testSingleFileAsInputMoveAndRename() throws IOException {
+        FileUtils.copyDirectory(new File(TEST_DATA_DIRECTORY), new File(INPUT_DIRECTORY));
+        MoveHDFS proc = new TestableMoveHDFS(kerberosProperties);
+        TestRunner runner = TestRunners.newTestRunner(proc);
+        runner.setProperty(MoveHDFS.INPUT_DIRECTORY_OR_FILE, INPUT_DIRECTORY + "/randombytes-1");
+        runner.setProperty(MoveHDFS.OUTPUT_DIRECTORY, OUTPUT_DIRECTORY);
+        runner.setProperty(MoveHDFS.OUTPUT_FILENAME, "randombytes-1-mod");
+        runner.enqueue(new byte[0]);
+        runner.run();
+        List<MockFlowFile> flowFiles = runner.getFlowFilesForRelationship(MoveHDFS.REL_SUCCESS);
+        runner.assertAllFlowFilesTransferred(MoveHDFS.REL_SUCCESS);
+        assertEquals(1, flowFiles.size());
+        assertFalse(new File(INPUT_DIRECTORY, "randombytes-1").exists());
+        assertTrue(new File(OUTPUT_DIRECTORY, "randombytes-1-mod").exists());
+    }
+
+    @Test
     public void testDirectoryWithSubDirectoryAsInputMove() throws IOException {
         FileUtils.copyDirectory(new File(TEST_DATA_DIRECTORY), new File(INPUT_DIRECTORY));
         File subdir = new File(INPUT_DIRECTORY, "subdir");

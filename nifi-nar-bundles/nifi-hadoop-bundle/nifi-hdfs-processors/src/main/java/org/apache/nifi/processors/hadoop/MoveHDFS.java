@@ -157,6 +157,22 @@ public class MoveHDFS extends AbstractHadoopProcessor {
             .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
+    public static final PropertyDescriptor OUTPUT_FILENAME = new PropertyDescriptor.Builder()
+            .name("Output Filename")
+            .description("The filename of the output file, used when 'Input Directory or File' property points to a single file")
+            .required(false)
+            .addValidator(StandardValidators.ATTRIBUTE_EXPRESSION_LANGUAGE_VALIDATOR)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
+            .build();
+
+    public static final PropertyDescriptor TRANSFER_ORIGINAL_FLOW_FILE = new PropertyDescriptor.Builder()
+            .name("Transfer Original Flow File")
+            .description("Whether or not to transfer original flow file.")
+            .required(false)
+            .allowableValues("true", "false")
+            .defaultValue("false")
+            .build();
+
     public static final PropertyDescriptor OPERATION = new PropertyDescriptor.Builder()
             .name("HDFS Operation")
             .description("The operation that will be performed on the source file")
@@ -208,11 +224,13 @@ public class MoveHDFS extends AbstractHadoopProcessor {
         props.add(CONFLICT_RESOLUTION);
         props.add(INPUT_DIRECTORY_OR_FILE);
         props.add(OUTPUT_DIRECTORY);
+        props.add(OUTPUT_FILENAME);
         props.add(OPERATION);
         props.add(FILE_FILTER_REGEX);
         props.add(IGNORE_DOTTED_FILES);
         props.add(REMOTE_OWNER);
         props.add(REMOTE_GROUP);
+        props.add(TRANSFER_ORIGINAL_FLOW_FILE);
         return props;
     }
 
@@ -353,11 +371,24 @@ public class MoveHDFS extends AbstractHadoopProcessor {
             ugi.doAs(new PrivilegedAction<Object>() {
                 @Override
                 public Object run() {
-                    FlowFile flowFile = session.create(parentFlowFile);
+                    final boolean transferOriginalFlowFile = context.getProperty(TRANSFER_ORIGINAL_FLOW_FILE).asBoolean();
+                    FlowFile flowFile = transferOriginalFlowFile ? session.clone(parentFlowFile) : session.create(parentFlowFile);
+
                     try {
                         final String originalFilename = file.getName();
                         final Path outputDirPath = getNormalizedPath(context, OUTPUT_DIRECTORY, parentFlowFile);
-                        final Path newFile = new Path(outputDirPath, originalFilename);
+                        String newFileName = originalFilename;
+
+                        if (files.size() == 1) {
+                            final String outputFileName = context.getProperty(OUTPUT_FILENAME)
+                                    .evaluateAttributeExpressions(flowFile).getValue();
+
+                            if (outputFileName != null) {
+                                newFileName = outputFileName;
+                            }
+                        }
+
+                        final Path newFile = new Path(outputDirPath, newFileName);
                         final boolean destinationExists = hdfs.exists(newFile);
                         // If destination file already exists, resolve that
                         // based on processor configuration
