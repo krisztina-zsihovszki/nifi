@@ -20,7 +20,6 @@ import static org.apache.nifi.processors.dropbox.DropboxFileInfo.ID;
 
 import com.dropbox.core.DbxException;
 import com.dropbox.core.DbxRequestConfig;
-import com.dropbox.core.oauth.DbxCredential;
 import com.dropbox.core.v2.DbxClientV2;
 import java.io.IOException;
 import java.io.InputStream;
@@ -40,6 +39,7 @@ import org.apache.nifi.annotation.documentation.SeeAlso;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.dropbox.credentials.service.DropboxCredentialService;
 import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.AbstractProcessor;
@@ -64,48 +64,6 @@ public class FetchDropbox extends AbstractProcessor {
 
     public static final String ERROR_MESSAGE_ATTRIBUTE = "error.message";
 
-    public static final PropertyDescriptor APP_KEY = new PropertyDescriptor.Builder()
-            .name("app-key")
-            .displayName("App Key")
-            .description("Dropbox API app key of the user. "+
-                    "You can obtain an API app key by registering with Dropbox: https://dropbox.com/developers/apps")
-            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .required(true)
-            .build();
-
-    public static final PropertyDescriptor APP_SECRET = new PropertyDescriptor.Builder()
-            .name("app-secret")
-            .displayName("App Secret")
-            .description("App Secret of the user. "+
-                    "You can obtain an API app secret by registering with Dropbox: https://dropbox.com/developers/apps")
-            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
-            .sensitive(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .required(true)
-            .build();
-
-    public static final PropertyDescriptor ACCESS_TOKEN = new PropertyDescriptor.Builder()
-            .name("access-token")
-            .displayName("Access Token")
-            .description("")
-            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
-            .sensitive(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .required(true)
-            .build();
-
-
-    public static final PropertyDescriptor REFRESH_TOKEN = new PropertyDescriptor.Builder()
-            .name("refresh-token")
-            .displayName("Refresh Token")
-            .description("")
-            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
-            .sensitive(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .required(true)
-            .build();
-
     public static final PropertyDescriptor FILE_ID = new PropertyDescriptor
             .Builder().name("dropbox-file-id")
             .displayName("Dropbox File ID")
@@ -123,6 +81,14 @@ public class FetchDropbox extends AbstractProcessor {
                     + " If not set, the Processor expects as attributes of a separate flowfile for each File to fetch.")
             .identifiesControllerService(RecordReaderFactory.class)
             .required(false)
+            .build();
+
+    public static final PropertyDescriptor CREDENTIAL_SERVICE = new PropertyDescriptor.Builder()
+            .name("dropbox-credential-service")
+            .displayName("Dropbox Credential Service")
+            .description("Controller Service used to obtain Dropbox credentials")
+            .identifiesControllerService(DropboxCredentialService.class)
+            .required(true)
             .build();
 
     public static final Relationship REL_SUCCESS =
@@ -144,10 +110,7 @@ public class FetchDropbox extends AbstractProcessor {
     private static final List<PropertyDescriptor> PROPERTIES = Collections.unmodifiableList(Arrays.asList(
             FILE_ID,
             RECORD_READER,
-            APP_KEY,
-            APP_SECRET,
-            ACCESS_TOKEN,
-            REFRESH_TOKEN
+            CREDENTIAL_SERVICE
     ));
 
     public static final Set<Relationship> relationships = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
@@ -171,15 +134,11 @@ public class FetchDropbox extends AbstractProcessor {
 
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws IOException {
-        final String appKey = context.getProperty(APP_KEY).evaluateAttributeExpressions().getValue();
-        final String appSecret = context.getProperty(APP_SECRET).evaluateAttributeExpressions().getValue();
-        final String accessToken = context.getProperty(ACCESS_TOKEN).evaluateAttributeExpressions().getValue();
-        final String refreshToken = context.getProperty(REFRESH_TOKEN).evaluateAttributeExpressions().getValue();
-
+        final DropboxCredentialService credentialService = context.getProperty(CREDENTIAL_SERVICE)
+                .asControllerService(DropboxCredentialService.class);
         //TODO: client id
         DbxRequestConfig config = new DbxRequestConfig("nifi");
-        DbxCredential credentials = new DbxCredential(accessToken, -1L, refreshToken, appKey, appSecret);
-        dropboxApiClient = new DbxClientV2(config, credentials);
+        dropboxApiClient = new DbxClientV2(config, credentialService.getDropboxCredential());
     }
 
     @Override
