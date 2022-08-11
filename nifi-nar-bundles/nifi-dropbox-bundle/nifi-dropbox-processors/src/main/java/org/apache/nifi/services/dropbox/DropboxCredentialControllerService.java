@@ -38,8 +38,8 @@ public class DropboxCredentialControllerService extends AbstractControllerServic
     public static final PropertyDescriptor APP_KEY = new PropertyDescriptor.Builder()
             .name("app-key")
             .displayName("App Key")
-            .description("Dropbox API app key of the user. "+
-                    "You can obtain an API app key by registering with Dropbox: https://dropbox.com/developers/apps")
+            .description("Dropbox API app key of the user's Dropbox app"+
+                    "See controller service's usage documentation for more details about app key")
             .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .required(true)
@@ -48,8 +48,8 @@ public class DropboxCredentialControllerService extends AbstractControllerServic
     public static final PropertyDescriptor APP_SECRET = new PropertyDescriptor.Builder()
             .name("app-secret")
             .displayName("App Secret")
-            .description("App Secret of the user. "+
-                    "You can obtain an API app secret by registering with Dropbox: https://dropbox.com/developers/apps")
+            .description("App Secret of the user's Dropbox app "+
+                    "See controller service's usage documentation for more details about app secret")
             .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .sensitive(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
@@ -59,7 +59,8 @@ public class DropboxCredentialControllerService extends AbstractControllerServic
     public static final PropertyDescriptor ACCESS_TOKEN = new PropertyDescriptor.Builder()
             .name("access-token")
             .displayName("Access Token")
-            .description("")
+            .description("Access token of the user's Dropbox app " +
+                    "See controller service's usage documentation for more details about app access token generation")
             .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .sensitive(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
@@ -69,7 +70,8 @@ public class DropboxCredentialControllerService extends AbstractControllerServic
     public static final PropertyDescriptor REFRESH_TOKEN = new PropertyDescriptor.Builder()
             .name("refresh-token")
             .displayName("Refresh Token")
-            .description("")
+            .description("Refresh token of the user's Dropbox app "+
+                    "See controller service's usage documentation for more details about app refresh token generation")
             .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .sensitive(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)

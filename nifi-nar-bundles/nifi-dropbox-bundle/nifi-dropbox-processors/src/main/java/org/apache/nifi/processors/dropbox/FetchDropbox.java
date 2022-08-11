@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.regex.Pattern;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
 import org.apache.nifi.annotation.behavior.WritesAttributes;
@@ -65,67 +67,57 @@ public class FetchDropbox extends AbstractProcessor {
     public static final String ERROR_MESSAGE_ATTRIBUTE = "error.message";
 
     public static final PropertyDescriptor FILE_ID = new PropertyDescriptor
-            .Builder().name("dropbox-file-id")
-            .displayName("Dropbox File ID")
-            .description("The ID of Dropbox file to fetch")
+            .Builder().name("dropbox-id")
+            .displayName("Dropbox file ID or path")
+            .description("The ID or path of Dropbox file to fetch")
             .required(true)
             .defaultValue("${dropbox.id}")
             .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .addValidator(StandardValidators.createRegexMatchingValidator(
+                    Pattern.compile("(/(.|[\\r\\n])*)?|id:.*|(ns:[0-9]+(/.*)?)")))
             .build();
-
-    static final PropertyDescriptor RECORD_READER = new PropertyDescriptor.Builder()
-            .name("record-reader")
-            .displayName("Record Reader")
-            .description("Specifies the Controller Service to use for reading incoming Dropbox file meta-data as NiFi Records."
-                    + " If not set, the Processor expects as attributes of a separate flowfile for each File to fetch.")
-            .identifiesControllerService(RecordReaderFactory.class)
-            .required(false)
-            .build();
-
     public static final PropertyDescriptor CREDENTIAL_SERVICE = new PropertyDescriptor.Builder()
             .name("dropbox-credential-service")
             .displayName("Dropbox Credential Service")
-            .description("Controller Service used to obtain Dropbox credentials")
+            .description("Controller Service used to obtain Dropbox credentials." +
+                    " See controller service's usage documentation for more details")
             .identifiesControllerService(DropboxCredentialService.class)
             .required(true)
             .build();
-
     public static final Relationship REL_SUCCESS =
             new Relationship.Builder()
                     .name("success")
                     .description("A flowfile will be routed here for each successfully fetched File.")
                     .build();
-
     public static final Relationship REL_FAILURE =
             new Relationship.Builder().name("failure")
-                    .description("A flowfile will be routed here for each File for which fetch was attempted but failed.")
+                    .description(
+                            "A flowfile will be routed here for each File for which fetch was attempted but failed.")
                     .build();
-
     public static final Relationship REL_INPUT_FAILURE =
             new Relationship.Builder().name("input_failure")
-                    .description("The incoming flowfile will be routed here if it's content could not be processed.")
+                    .description("The incoming flowfile will be routed here if its content could not be processed.")
                     .build();
-
-    private static final List<PropertyDescriptor> PROPERTIES = Collections.unmodifiableList(Arrays.asList(
-            FILE_ID,
-            RECORD_READER,
-            CREDENTIAL_SERVICE
-    ));
-
     public static final Set<Relationship> relationships = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             REL_SUCCESS,
             REL_FAILURE,
             REL_INPUT_FAILURE
     )));
-
-
+    static final PropertyDescriptor RECORD_READER = new PropertyDescriptor.Builder()
+            .name("record-reader")
+            .displayName("Record Reader")
+            .description(
+                    "Specifies the Controller Service to use for reading incoming Dropbox file meta-data as NiFi Records."
+                            + " If not set, the Processor expects as attributes of a separate flowfile for each File to fetch.")
+            .identifiesControllerService(RecordReaderFactory.class)
+            .required(false)
+            .build();
+    private static final List<PropertyDescriptor> PROPERTIES = Collections.unmodifiableList(Arrays.asList(
+            FILE_ID,
+            RECORD_READER,
+            CREDENTIAL_SERVICE
+    ));
     private DbxClientV2 dropboxApiClient;
-
-    @Override
-    protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
-        return PROPERTIES;
-    }
 
     @Override
     public Set<Relationship> getRelationships() {
@@ -133,12 +125,8 @@ public class FetchDropbox extends AbstractProcessor {
     }
 
     @OnScheduled
-    public void onScheduled(final ProcessContext context) throws IOException {
-        final DropboxCredentialService credentialService = context.getProperty(CREDENTIAL_SERVICE)
-                .asControllerService(DropboxCredentialService.class);
-        //TODO: client id
-        DbxRequestConfig config = new DbxRequestConfig("nifi");
-        dropboxApiClient = new DbxClientV2(config, credentialService.getDropboxCredential());
+    public void onScheduled(final ProcessContext context) {
+        dropboxApiClient = getDropboxApiClient(context);
     }
 
     @Override
@@ -149,17 +137,19 @@ public class FetchDropbox extends AbstractProcessor {
         }
 
         if (context.getProperty(RECORD_READER).isSet()) {
-            RecordReaderFactory recordReaderFactory = context.getProperty(RECORD_READER).asControllerService(RecordReaderFactory.class);
+            RecordReaderFactory recordReaderFactory =
+                    context.getProperty(RECORD_READER).asControllerService(RecordReaderFactory.class);
 
             try (InputStream inFlowFile = session.read(flowFile)) {
                 final Map<String, String> flowFileAttributes = flowFile.getAttributes();
-                final RecordReader
-                        reader = recordReaderFactory.createRecordReader(flowFileAttributes, inFlowFile, flowFile.getSize(), getLogger());
+                final RecordReader reader = recordReaderFactory
+                        .createRecordReader(flowFileAttributes, inFlowFile, flowFile.getSize(), getLogger());
 
                 Record record;
                 while ((record = reader.nextRecord()) != null) {
                     String fileId = record.getAsString(ID);
                     FlowFile outFlowFile = session.create(flowFile);
+
                     try {
                         addAttributes(session, outFlowFile, record);
 
@@ -174,15 +164,15 @@ public class FetchDropbox extends AbstractProcessor {
             } catch (IOException | MalformedRecordException | SchemaNotFoundException e) {
                 getLogger().error("Couldn't read file metadata content as records from incoming flowfile", e);
 
-                session.putAttribute(flowFile, ERROR_MESSAGE_ATTRIBUTE, e.getMessage());
+                FlowFile outFlowFile = session.putAttribute(flowFile, ERROR_MESSAGE_ATTRIBUTE, e.getMessage());
 
-                session.transfer(flowFile, REL_INPUT_FAILURE);
+                session.transfer(outFlowFile, REL_INPUT_FAILURE);
             } catch (Exception e) {
                 getLogger().error("Unexpected error while processing incoming flowfile", e);
 
-                session.putAttribute(flowFile, ERROR_MESSAGE_ATTRIBUTE, e.getMessage());
+                FlowFile outFlowFile = session.putAttribute(flowFile, ERROR_MESSAGE_ATTRIBUTE, e.getMessage());
 
-                session.transfer(flowFile, REL_INPUT_FAILURE);
+                session.transfer(outFlowFile, REL_INPUT_FAILURE);
             }
         } else {
             String fileId = context.getProperty(FILE_ID).evaluateAttributeExpressions(flowFile).getValue();
@@ -197,6 +187,29 @@ public class FetchDropbox extends AbstractProcessor {
         session.commitAsync();
     }
 
+    @Override
+    protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
+        return PROPERTIES;
+    }
+
+    protected DbxClientV2 getDropboxApiClient(ProcessContext context) {
+        final DropboxCredentialService credentialService = context.getProperty(CREDENTIAL_SERVICE)
+                .asControllerService(DropboxCredentialService.class);
+        DbxRequestConfig config = new DbxRequestConfig("nifi" + UUID.randomUUID());
+        return new DbxClientV2(config, credentialService.getDropboxCredential());
+    }
+
+    void fetchFile(String fileId, ProcessSession session, FlowFile outFlowFile) throws IOException {
+        try {
+            InputStream dropboxInputStream = dropboxApiClient.files()
+                    .download(fileId)
+                    .getInputStream();
+            session.importFrom(dropboxInputStream, outFlowFile);
+        } catch (DbxException e) {
+            throw new IOException("Error while downloading file from Dropbox " + fileId, e);
+        }
+    }
+
     private void addAttributes(ProcessSession session, FlowFile outFlowFile, Record record) {
         Map<String, String> attributes = new HashMap<>();
 
@@ -208,20 +221,9 @@ public class FetchDropbox extends AbstractProcessor {
         session.putAllAttributes(outFlowFile, attributes);
     }
 
-    void fetchFile(String fileId, ProcessSession session, FlowFile outFlowFile) throws IOException {
-        try {
-            InputStream dropboxInputStream =
-                    dropboxApiClient.files().download(fileId)
-                            .getInputStream();
-            session.importFrom(dropboxInputStream, outFlowFile);
-        } catch (DbxException e) {
-           throw new IOException("Error while downloading file with id "+fileId, e);
-        }
-    }
-
     private void handleUnexpectedError(ProcessSession session, FlowFile flowFile, String fileId, Exception e) {
         getLogger().error("Unexpected error while fetching and processing file with id '{}'", fileId, e);
-        session.putAttribute(flowFile, ERROR_MESSAGE_ATTRIBUTE, e.getMessage());
-        session.transfer(flowFile, REL_FAILURE);
+        FlowFile outFlowFile = session.putAttribute(flowFile, ERROR_MESSAGE_ATTRIBUTE, e.getMessage());
+        session.transfer(outFlowFile, REL_FAILURE);
     }
 }
