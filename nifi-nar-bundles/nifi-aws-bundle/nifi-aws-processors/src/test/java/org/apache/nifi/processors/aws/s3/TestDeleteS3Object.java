@@ -74,6 +74,35 @@ public class TestDeleteS3Object {
     }
 
     @Test
+    public void testDeleteObjectSimpleRegionFromFlowFileAttribute() {
+        runner.setProperty(DeleteS3Object.REGION, "Use 's3.region' Attribute");
+        runner.setProperty(DeleteS3Object.BUCKET, "test-bucket");
+        final Map<String, String> attrs = new HashMap<>();
+        attrs.put("filename", "delete-key");
+        attrs.put("s3.region", "us-east-1");
+        runner.enqueue(new byte[0], attrs);
+
+        runner.run(1);
+
+        runner.assertAllFlowFilesTransferred(DeleteS3Object.REL_SUCCESS, 1);
+    }
+
+
+    @Test
+    public void testDeleteObjectSimpleWrongRegionFromFlowFileAttribute() {
+        runner.setProperty(DeleteS3Object.REGION, "Use 's3.region' Attribute");
+
+        runner.setProperty(DeleteS3Object.BUCKET, "test-bucket");
+        final Map<String, String> attrs = new HashMap<>();
+        attrs.put("filename", "delete-key");
+        attrs.put("s3.region", "wrong_region");
+        runner.enqueue(new byte[0], attrs);
+
+        runner.run(1);
+
+        runner.assertAllFlowFilesTransferred(DeleteS3Object.REL_FAILURE, 1);
+    }
+    @Test
     public void testDeleteObjectS3Exception() {
         runner.setProperty(DeleteS3Object.REGION, "us-west-2");
         runner.setProperty(DeleteS3Object.BUCKET, "test-bucket");

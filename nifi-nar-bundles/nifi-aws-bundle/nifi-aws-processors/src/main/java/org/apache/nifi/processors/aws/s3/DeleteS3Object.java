@@ -71,7 +71,7 @@ public class DeleteS3Object extends AbstractS3Processor {
             SECRET_KEY,
             CREDENTIALS_FILE,
             AWS_CREDENTIALS_PROVIDER_SERVICE,
-            REGION,
+            S3_CUSTOM_REGION,
             TIMEOUT,
             VERSION_ID,
             FULL_CONTROL_USER_LIST,
@@ -96,10 +96,20 @@ public class DeleteS3Object extends AbstractS3Processor {
         return properties;
     }
 
+
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) {
         FlowFile flowFile = session.get();
         if (flowFile == null) {
+            return;
+        }
+
+        try {
+            setClientBasedOnRegionAttribute(context, flowFile.getAttributes());
+        } catch (Exception e) {
+            getLogger().error("Failed to initialize S3 client", e);
+            flowFile = session.penalize(flowFile);
+            session.transfer(flowFile, REL_FAILURE);
             return;
         }
 

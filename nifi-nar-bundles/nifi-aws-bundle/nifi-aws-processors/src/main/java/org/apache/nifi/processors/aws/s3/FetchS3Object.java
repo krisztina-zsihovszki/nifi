@@ -185,7 +185,7 @@ public class FetchS3Object extends AbstractS3Processor {
         final String bucket = context.getProperty(BUCKET).evaluateAttributeExpressions(attributes).getValue();
         final String key = context.getProperty(KEY).evaluateAttributeExpressions(attributes).getValue();
 
-        final AmazonS3Client client = getConfiguration(context).getClient();
+        final AmazonS3Client client = getConfiguration(context, attributes).getClient();
         final GetObjectMetadataRequest request = createGetObjectMetadataRequest(context, attributes);
 
         try {
@@ -212,6 +212,15 @@ public class FetchS3Object extends AbstractS3Processor {
     public void onTrigger(final ProcessContext context, final ProcessSession session) {
         FlowFile flowFile = session.get();
         if (flowFile == null) {
+            return;
+        }
+
+        try {
+            setClientBasedOnRegionAttribute(context, flowFile.getAttributes());
+        } catch (Exception e) {
+            getLogger().error("Failed to initialize S3 client", e);
+            flowFile = session.penalize(flowFile);
+            session.transfer(flowFile, REL_FAILURE);
             return;
         }
 

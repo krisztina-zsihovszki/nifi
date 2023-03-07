@@ -22,6 +22,7 @@ import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.regions.Region;
+import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.S3ClientOptions;
 import com.amazonaws.services.s3.model.AccessControlList;
@@ -32,14 +33,19 @@ import com.amazonaws.services.s3.model.EmailAddressGrantee;
 import com.amazonaws.services.s3.model.Grantee;
 import com.amazonaws.services.s3.model.Owner;
 import com.amazonaws.services.s3.model.Permission;
+import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.nifi.annotation.lifecycle.OnScheduled;
+import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
+import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.processors.aws.AbstractAWSCredentialsProviderProcessor;
+import org.apache.nifi.processors.aws.AbstractAWSProcessor;
 import org.apache.nifi.processors.aws.AwsPropertyDescriptors;
 import org.apache.nifi.processors.aws.signer.AwsCustomSignerUtil;
 import org.apache.nifi.processors.aws.signer.AwsSignerType;
@@ -49,6 +55,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 
+import static java.lang.String.format;
 import static org.apache.nifi.processors.aws.signer.AwsSignerType.AWS_S3_V2_SIGNER;
 import static org.apache.nifi.processors.aws.signer.AwsSignerType.AWS_S3_V4_SIGNER;
 import static org.apache.nifi.processors.aws.signer.AwsSignerType.CUSTOM_SIGNER;
@@ -150,6 +157,16 @@ public abstract class AbstractS3Processor extends AbstractAWSCredentialsProvider
             .dependsOn(SIGNER_OVERRIDE, CUSTOM_SIGNER)
             .build();
 
+    private static final String S3_REGION_ATTRIBUTE = "s3.region" ;
+    static final AllowableValue ATTRIBUTE_DRIVEN_REGION = new AllowableValue("Use '" + S3_REGION_ATTRIBUTE + "' Attribute",
+            "Use '" + S3_REGION_ATTRIBUTE + "' Attribute",
+            "Inspects the '" + S3_REGION_ATTRIBUTE + "' FlowFile attribute to determine the used S3 region.");
+
+    public static final PropertyDescriptor S3_CUSTOM_REGION = new PropertyDescriptor.Builder()
+            .fromPropertyDescriptor(AbstractAWSProcessor.REGION)
+            .allowableValues(getCustomAvailableRegions())
+            .build();
+
     public static final PropertyDescriptor ENCRYPTION_SERVICE = new PropertyDescriptor.Builder()
             .name("encryption-service")
             .displayName("Encryption Service")
@@ -196,6 +213,65 @@ public abstract class AbstractS3Processor extends AbstractAWSCredentialsProvider
         configureClientOptions(context, s3);
 
         return s3;
+    }
+
+    protected Region resolveRegion(final ProcessContext context, final Map<String, String> attributes) {
+        String regionValue = context.getProperty(S3_CUSTOM_REGION).getValue();
+
+        if (ATTRIBUTE_DRIVEN_REGION.getValue().equals(regionValue)) {
+            regionValue = attributes.get(S3_REGION_ATTRIBUTE);
+        }
+
+        return parseRegionValue(regionValue);
+    }
+
+    private Region parseRegionValue(String regionValue) {
+        try {
+            if (regionValue == null) {
+                throw new ProcessException(format("[%s] was selected as region source but [%s] attribute does not exist", ATTRIBUTE_DRIVEN_REGION, S3_REGION_ATTRIBUTE));
+            }
+
+            return Region.getRegion(Regions.fromName(regionValue));
+        } catch (Exception e) {
+            throw new ProcessException(format("The [%s] attribute contains an invalid region value [%s]", S3_REGION_ATTRIBUTE, regionValue), e);
+        }
+    }
+
+    protected void setClientBasedOnRegionAttribute(final ProcessContext context, final Map<String, String> attributes) {
+        String regionValue = context.getProperty(S3_CUSTOM_REGION).getValue();
+
+        if (ATTRIBUTE_DRIVEN_REGION.getValue().equals(regionValue)) {
+            regionValue = attributes.get(S3_REGION_ATTRIBUTE);
+            Region region = parseRegionValue(regionValue);
+
+            final AWSConfiguration awsConfiguration = getConfiguration(context, region);
+            this.client = awsConfiguration.getClient();
+            this.region = awsConfiguration.getRegion();
+        }
+    }
+
+    protected AWSConfiguration getConfiguration(final ProcessContext context, final Map<String, String> attributes) {
+        final Region region = resolveRegion(context, attributes);
+        return super.getConfiguration(context, region);
+    }
+
+    @OnScheduled
+    public void onScheduled(final ProcessContext context) {
+        if (!isAttributeDrivenRegion(context)) {
+            setClientAndRegion(context);
+        }
+    }
+
+    private boolean isAttributeDrivenRegion(final ProcessContext context) {
+        String regionValue = context.getProperty(S3_CUSTOM_REGION).getValue();
+        return ATTRIBUTE_DRIVEN_REGION.getValue().equals(regionValue);
+    }
+
+    private static AllowableValue[] getCustomAvailableRegions() {
+        final List<AllowableValue> values = new ArrayList<>();
+        Collections.addAll(values, AbstractAWSCredentialsProviderProcessor.getAvailableRegions());
+        values.add(ATTRIBUTE_DRIVEN_REGION);
+        return values.toArray(new AllowableValue[0]);
     }
 
     private void configureClientOptions(final ProcessContext context, final AmazonS3Client s3) {
@@ -285,10 +361,10 @@ public abstract class AbstractS3Processor extends AbstractAWSCredentialsProvider
         Region region = getRegion();
 
         if (region == null) {
-            return  DEFAULT_PROTOCOL.toString() + "://s3.amazonaws.com/" + bucket + "/" + key;
+            return  DEFAULT_PROTOCOL + "://s3.amazonaws.com/" + bucket + "/" + key;
         } else {
             final String endpoint = region.getServiceEndpoint("s3");
-            return DEFAULT_PROTOCOL.toString() + "://" + endpoint + "/" + bucket + "/" + key;
+            return DEFAULT_PROTOCOL + "://" + endpoint + "/" + bucket + "/" + key;
         }
     }
 

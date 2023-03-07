@@ -187,6 +187,26 @@ public class TestPutS3Object {
         assertEquals(URLEncoder.encode("Iñtërnâtiônàližætiøn.txt", "UTF-8"), objectMetadata.getContentDisposition());
     }
 
+    @Test
+    public void testRegionFromFlowFileAttribute() {
+        runner.setProperty(PutS3Object.OBJECT_TAGS_PREFIX, "tagS3");
+        runner.setProperty(PutS3Object.REMOVE_TAG_PREFIX, "false");
+        prepareTestWithRegionInAttributes("testfile.txt", "us-east-1");
+
+        runner.run(1);
+
+        runner.assertAllFlowFilesTransferred(PutS3Object.REL_SUCCESS, 1);
+    }
+
+    @Test
+    public void testRegionComesFromFlowFileAttributeError() {
+        prepareTestWithRegionInAttributes("testfile.txt", "wrong_region");
+
+        runner.run(1);
+
+        runner.assertAllFlowFilesTransferred(PutS3Object.REL_FAILURE, 1);
+    }
+
     private void prepareTest() {
         prepareTest("testfile.txt");
     }
@@ -201,6 +221,24 @@ public class TestPutS3Object {
         ffAttributes.put("tagS3PII", "true");
         runner.enqueue("Test Content", ffAttributes);
 
+        initMocks();
+    }
+
+    private void prepareTestWithRegionInAttributes(String filename, String region) {
+        runner.setProperty(PutS3Object.REGION, "Use 's3.region' Attribute");
+        runner.setProperty(PutS3Object.BUCKET, "test-bucket");
+        runner.assertValid();
+
+        Map<String, String> ffAttributes = new HashMap<>();
+        ffAttributes.put("s3.region", region);
+        ffAttributes.put("filename", filename);
+        ffAttributes.put("tagS3PII", "true");
+        runner.enqueue("Test Content", ffAttributes);
+
+        initMocks();
+    }
+
+    private void initMocks() {
         PutObjectResult putObjectResult = new PutObjectResult();
         putObjectResult.setExpirationTime(new Date());
         putObjectResult.setMetadata(new ObjectMetadata());

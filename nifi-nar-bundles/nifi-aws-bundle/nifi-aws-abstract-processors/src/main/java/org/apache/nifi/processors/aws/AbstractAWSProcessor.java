@@ -312,21 +312,9 @@ public abstract class AbstractAWSProcessor<ClientType extends AmazonWebServiceCl
      */
     public abstract void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException;
 
-    protected Region getRegionAndInitializeEndpoint(final ProcessContext context, final AmazonWebServiceClient client) {
-        final Region region;
-        // if the processor supports REGION, get the configured region.
-        if (getSupportedPropertyDescriptors().contains(REGION)) {
-            final String regionValue = context.getProperty(REGION).getValue();
-            if (regionValue != null) {
-                region = Region.getRegion(Regions.fromName(regionValue));
-                if (client != null) {
-                    client.setRegion(region);
-                }
-            } else {
-                region = null;
-            }
-        } else {
-            region = null;
+    protected void initializeEndpoint(final Region region, final ProcessContext context, final AmazonWebServiceClient client) {
+        if (region!= null && client != null) {
+            client.setRegion(region);
         }
 
         // if the endpoint override has been configured, set the endpoint.
@@ -351,6 +339,17 @@ public abstract class AbstractAWSProcessor<ClientType extends AmazonWebServiceCl
                     // e.g. https://sqs.{region}.***.***.***.gov
                     client.setEndpoint(urlstr);
                 }
+            }
+        }
+    }
+
+    protected Region getRegion(final ProcessContext context) {
+        final Region region = null;
+        // if the processor supports REGION, get the configured region.
+        if (getSupportedPropertyDescriptors().contains(REGION)) {
+            final String regionValue = context.getProperty(REGION).getValue();
+            if (regionValue != null) {
+                return Region.getRegion(Regions.fromName(regionValue));
             }
         }
         return region;
@@ -446,15 +445,25 @@ public abstract class AbstractAWSProcessor<ClientType extends AmazonWebServiceCl
     }
 
     /**
+     * Parses and configures the client from the context.
+     * @param context The process context
+     * @param region The used region
+     * @return The parsed configuration
+     */
+    protected AWSConfiguration getConfiguration(final ProcessContext context, Region region) {
+        final ClientType client = createClient(context);
+        initializeEndpoint(region, context, client);
+        return new AWSConfiguration(client, region);
+    }
+
+    /**
      * Parses and configures the client and region from the context.
      * @param context The process context
      * @return The parsed configuration
      */
     protected AWSConfiguration getConfiguration(final ProcessContext context) {
-        final ClientType client = createClient(context);
-        final Region region = getRegionAndInitializeEndpoint(context, client);
-
-        return new AWSConfiguration(client, region);
+       final Region region = getRegion(context);
+       return getConfiguration(context, region);
     }
 
     public class AWSConfiguration {

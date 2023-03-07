@@ -72,7 +72,7 @@ public class TestFetchS3Object {
             }
 
             @Override
-            protected AbstractAWSProcessor<AmazonS3Client>.AWSConfiguration getConfiguration(ProcessContext context) {
+            protected AbstractAWSProcessor<AmazonS3Client>.AWSConfiguration getConfiguration(ProcessContext context, final Map<String, String> attributes) {
                 return new AWSConfiguration(mockS3Client, null);
             }
         };
@@ -143,6 +143,28 @@ public class TestFetchS3Object {
         ff.assertAttributeEquals("userKey2", "userValue2");
         ff.assertAttributeEquals("s3.sseAlgorithm", "testAlgorithm");
         ff.assertContentEquals("Some Content");
+    }
+
+    @Test
+    public void testGetObjectRegionFromFlowFileAttribute() {
+        runner.setProperty(PutS3Object.REGION, "Use 's3.region' Attribute");
+        runner.setProperty(FetchS3Object.BUCKET, "request-bucket");
+        final Map<String, String> attrs = new HashMap<>();
+        attrs.put("filename", "request-key");
+        attrs.put("s3.region", "us-east-1");
+        runner.enqueue(new byte[0], attrs);
+        runner.assertAllFlowFilesTransferred(FetchS3Object.REL_SUCCESS);
+    }
+
+    @Test
+    public void testGetObjectWrongRegionFromFlowFileAttribute() {
+        runner.setProperty(PutS3Object.REGION, "Use 's3.region' Attribute");
+        runner.setProperty(FetchS3Object.BUCKET, "request-bucket");
+        final Map<String, String> attrs = new HashMap<>();
+        attrs.put("filename", "request-key");
+        attrs.put("s3.region", "wrong_region");
+        runner.enqueue(new byte[0], attrs);
+        runner.assertAllFlowFilesTransferred(FetchS3Object.REL_FAILURE);
     }
 
     @Test

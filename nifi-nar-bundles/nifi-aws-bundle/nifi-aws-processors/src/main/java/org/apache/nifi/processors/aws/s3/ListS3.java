@@ -1129,7 +1129,7 @@ public class ListS3 extends AbstractS3Processor implements VerifiableProcessor {
 
     @Override
     public List<ConfigVerificationResult> verify(final ProcessContext context, final ComponentLog logger, final Map<String, String> attributes) {
-        final AmazonS3Client client = getConfiguration(context).getClient();
+        final AmazonS3Client client = getConfiguration(context, attributes).getClient();
 
         final List<ConfigVerificationResult> results = new ArrayList<>(super.verify(context, logger, attributes));
         final String bucketName = context.getProperty(BUCKET).evaluateAttributeExpressions(attributes).getValue();
