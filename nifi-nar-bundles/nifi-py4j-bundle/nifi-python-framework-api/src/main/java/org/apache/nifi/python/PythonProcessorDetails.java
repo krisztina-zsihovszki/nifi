@@ -22,6 +22,7 @@ import org.apache.nifi.python.processor.documentation.PropertyDescription;
 import org.apache.nifi.python.processor.documentation.UseCaseDetails;
 
 import java.util.List;
+import java.util.Map;
 
 public interface PythonProcessorDetails extends PythonObjectProxy {
     /**
@@ -53,6 +54,11 @@ public interface PythonProcessorDetails extends PythonObjectProxy {
      * @return the dependencies that must be imported in order to use the Processor
      */
     List<String> getDependencies();
+
+    /**
+     * @return the configuration settings that must be used while a dependency is imported in order to use the Processor
+     */
+    Map<String, String> getConfigSettings();
 
     /**
      * @return the name of the Java interface that is implemented by the Python Processor

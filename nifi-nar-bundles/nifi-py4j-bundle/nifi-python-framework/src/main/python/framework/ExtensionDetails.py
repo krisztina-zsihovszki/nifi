@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from nifiapi.__jvm__ import ArrayList
+from nifiapi.__jvm__ import JvmHolder
 
 class ExtensionDetails:
     class Java:
@@ -22,6 +23,7 @@ class ExtensionDetails:
     def __init__(self, type, interfaces,
                  version='Unknown',
                  dependencies=None,
+                 config_settings=None,
                  source_location=None,
                  description=None,
                  tags=None,
@@ -32,6 +34,7 @@ class ExtensionDetails:
         self.type = type
         self.interfaces = interfaces if interfaces else []
         self.dependencies = dependencies if dependencies else []
+        self.config_settings = config_settings if config_settings else {}
         self.tags = tags if tags else []
         self.version = version
         self.source_location = source_location
@@ -51,6 +54,12 @@ class ExtensionDetails:
 
     def getDependencies(self):
         return ArrayList(self.dependencies)
+
+    def getConfigSettings(self):
+        map = JvmHolder.jvm.java.util.HashMap()
+        for key, value in self.config_settings.items():
+            map.put(key, value)
+        return map
 
     def getCapabilityDescription(self):
         return self.description

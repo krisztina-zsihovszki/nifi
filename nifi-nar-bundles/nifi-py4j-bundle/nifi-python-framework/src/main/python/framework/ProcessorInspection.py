@@ -49,6 +49,7 @@ def get_processor_details(class_node, module_file):
             logger.debug(f"Found ProcessorDetails class in {class_node.name}")
             version = __get_processor_version(child_class_node)
             dependencies = __get_processor_dependencies(child_class_node, class_node.name)
+            config_settings = __get_processor_config_settings(child_class_node, class_node.name)
             description = __get_processor_description(child_class_node)
             tags = __get_processor_tags(child_class_node)
             use_cases = get_use_cases(class_node)
@@ -59,6 +60,7 @@ def get_processor_details(class_node, module_file):
                                                      type=class_node.name,
                                                      version=version,
                                                      dependencies=dependencies,
+                                                     config_settings=config_settings,
                                                      source_location=module_file,
                                                      description=description,
                                                      tags=tags,
@@ -85,6 +87,15 @@ def __get_processor_dependencies(details_node, class_name):
         logger.info("Found the following external dependencies that are required for class {0}: {1}".format(class_name, deps))
 
     return deps
+
+def __get_processor_config_settings(details_node, class_name):
+    config_settings = get_assigned_value(details_node, 'config_settings', {})
+    if len(config_settings) == 0:
+        logger.info("Found no config settings that are required for class %s" % class_name)
+    else:
+        logger.info("Found the following config settings that are required for class {0}: {1}".format(class_name, config_settings))
+
+    return config_settings
 
 
 def __get_processor_tags(details_node):
@@ -236,6 +247,7 @@ def get_constant_values(val):
         key_values = [get_constant_values(v).strip() for v in keys]
         value_values = [get_constant_values(v).strip() for v in values]
         return dict(zip(key_values, value_values))
+
     if isinstance(val, ast.Attribute):
         return val.attr
     if isinstance(val, ast.BinOp) and isinstance(val.op, ast.Add):

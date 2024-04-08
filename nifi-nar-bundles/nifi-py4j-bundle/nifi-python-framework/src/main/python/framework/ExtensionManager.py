@@ -276,6 +276,7 @@ class ExtensionManager:
         if processor_details.source_location is not None:
             package_dir = os.path.dirname(processor_details.source_location)
             requirements_file = os.path.join(package_dir, 'requirements.txt')
+
             if os.path.exists(requirements_file):
                 args = [python_cmd, '-m', 'pip', 'install', '--no-cache-dir', '--target', target_dir, '-r', requirements_file]
 
@@ -288,6 +289,7 @@ class ExtensionManager:
                     raise RuntimeError(f"Failed to import requirements for package {package_dir} from requirements.txt file: process exited with status code {result}")
 
         dependencies = processor_details.getDependencies()
+
         if len(dependencies) > 0:
             python_cmd = os.getenv("PYTHON_CMD")
             args = [python_cmd, '-m', 'pip', 'install', '--no-cache-dir', '--target', target_dir]
@@ -303,6 +305,31 @@ class ExtensionManager:
                 raise RuntimeError(f"Failed to import requirements for {class_name}: process exited with status code {result}")
         else:
             logger.info(f"No dependencies to import for {class_name}")
+
+
+        config_settings = processor_details.getConfigSettings()
+        logger.info(f"Config settings are {config_settings} for class {class_name}")
+
+        if len(config_settings) > 0:
+            python_cmd = os.getenv("PYTHON_CMD")
+            args = [python_cmd, '-m', 'pip', 'install', '--no-cache-dir', '--target', target_dir]
+
+            for dep, config_setting in config_settings.items():
+                args.append(dep)
+
+                for setting in config_setting.split():
+                    args.append('--config-settings')
+                    args.append(setting)
+
+            logger.info(f"Importing dependencies {config_settings} for {class_name} to {target_dir} using command {args}")
+            result = subprocess.run(args)
+
+            if result.returncode == 0:
+                logger.info(f"Successfully imported config settings for {class_name} to {target_dir}")
+            else:
+                raise RuntimeError(f"Failed to import requirements for {class_name}: process exited with status code {result}")
+        else:
+            logger.info(f"No dependencies with config settings to import for {class_name}")
 
         # Write a completion Marker File
         with open(completion_marker_file, "w") as file:
