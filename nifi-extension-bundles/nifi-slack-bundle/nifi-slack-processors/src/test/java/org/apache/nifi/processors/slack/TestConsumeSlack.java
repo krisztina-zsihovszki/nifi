@@ -73,13 +73,13 @@ public class TestConsumeSlack {
 
         testRunner = TestRunners.newTestRunner(processor);
         testRunner.setProperty(ConsumeSlack.ACCESS_TOKEN, "token");
-        testRunner.setProperty(ConsumeSlack.CHANNEL_IDS, "cid1");
+        testRunner.setProperty(ConsumeSlack.CHANNEL_IDS, "CID1");
         testRunner.setProperty(ConsumeSlack.BATCH_SIZE, "5");
     }
 
     @Test
     public void testRequestRateLimited() {
-        testRunner.setProperty(ConsumeSlack.CHANNEL_IDS, "cid1,#cname2");
+        testRunner.setProperty(ConsumeSlack.CHANNEL_IDS, "CID1,#cname2");
         final Message message = createMessage("U12345", "Hello world", "1683903832.350");
         client.addHistoryResponse(noMore(createSuccessfulHistoryResponse(message)));
 
@@ -110,7 +110,7 @@ public class TestConsumeSlack {
         final Message[] outputMessages = objectMapper.readValue(outputContent, Message[].class);
         assertEquals(message, outputMessages[0]);
 
-        outFlowFile1.assertAttributeEquals("slack.channel.id", "cid1");
+        outFlowFile1.assertAttributeEquals("slack.channel.id", "CID1");
         outFlowFile1.assertAttributeEquals("slack.channel.name", "#cname1");
     }
 
@@ -134,7 +134,7 @@ public class TestConsumeSlack {
         final Message[] expectedMessages = new Message[] {message1, message2, message3, message4};
         assertArrayEquals(expectedMessages, outputMessages);
 
-        outFlowFile1.assertAttributeEquals("slack.channel.id", "cid1");
+        outFlowFile1.assertAttributeEquals("slack.channel.id", "CID1");
         outFlowFile1.assertAttributeEquals("slack.channel.name", "#cname1");
     }
 
@@ -150,7 +150,7 @@ public class TestConsumeSlack {
 
     @Test
     public void testMultipleChannels() {
-        testRunner.setProperty(ConsumeSlack.CHANNEL_IDS, "     cid1,     , cid2");
+        testRunner.setProperty(ConsumeSlack.CHANNEL_IDS, "     CID1,     , CID2");
         final Message message = createMessage("U12345", "Hello world", "1683903832.350");
         client.addHistoryResponse(noMore(createSuccessfulHistoryResponse(message)));
 
@@ -172,8 +172,8 @@ public class TestConsumeSlack {
             .toList();
 
         assertEquals(2, channelIdsRequested.size());
-        assertTrue(channelIdsRequested.contains("cid1"));
-        assertTrue(channelIdsRequested.contains("cid2"));
+        assertTrue(channelIdsRequested.contains("CID1"));
+        assertTrue(channelIdsRequested.contains("CID2"));
     }
 
     @Test
@@ -438,6 +438,15 @@ public class TestConsumeSlack {
         assertArrayEquals(expectedSecondMessages, secondOutputMessages);
     }
 
+    @Test
+    void testChannelIdValidity() {
+        testRunner.setProperty(ConsumeSlack.CHANNEL_IDS, "C055UJP9AAA,#test_channel");
+        testRunner.assertValid();
+        testRunner.setProperty(ConsumeSlack.CHANNEL_IDS, "C055UJP9AAA,test_channel");
+        testRunner.assertNotValid();
+        testRunner.setProperty(ConsumeSlack.CHANNEL_IDS, "test_channel1, test_channel2");
+        testRunner.assertNotValid();
+    }
 
     private Message createMessage(final String user, final String text, final String ts) {
         return createMessage(user, text, ts, null);
@@ -584,8 +593,8 @@ public class TestConsumeSlack {
         @Override
         public Map<String, String> fetchChannelIds() {
             final Map<String, String> nameIdMapping = new HashMap<String, String>();
-            nameIdMapping.put("#cname1", "cid1");
-            nameIdMapping.put("#cname2", "cid2");
+            nameIdMapping.put("#cname1", "CID1");
+            nameIdMapping.put("#cname2", "CID2");
             return nameIdMapping;
         }
 

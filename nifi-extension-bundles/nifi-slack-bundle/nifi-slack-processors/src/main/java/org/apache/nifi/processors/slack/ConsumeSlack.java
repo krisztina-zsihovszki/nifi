@@ -48,6 +48,8 @@ import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.ValidationContext;
+import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.state.Scope;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.AbstractProcessor;
@@ -60,6 +62,7 @@ import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.processors.slack.consume.ConsumeChannel;
 import org.apache.nifi.processors.slack.consume.ConsumeSlackClient;
 import org.apache.nifi.processors.slack.consume.UsernameLookup;
+import org.apache.nifi.processors.slack.util.ChannelIDValidator;
 import org.apache.nifi.processors.slack.util.RateLimit;
 import org.apache.nifi.processors.slack.util.SlackResponseUtil;
 import org.apache.nifi.util.StringUtils;
@@ -68,6 +71,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -214,6 +218,12 @@ public class ConsumeSlack extends AbstractProcessor implements VerifiableProcess
 
         final List<ConsumeChannel> consumeChannels = createChannels(context, slackApp);
         this.channels.addAll(consumeChannels);
+    }
+    @Override
+    protected Collection<ValidationResult> customValidate(final ValidationContext validationContext) {
+        List<ValidationResult> problems = new ArrayList<>(super.customValidate(validationContext));
+        problems.addAll(ChannelIDValidator.getChannelIdValidationResult(validationContext, CHANNEL_IDS));
+        return problems;
     }
 
     @OnStopped

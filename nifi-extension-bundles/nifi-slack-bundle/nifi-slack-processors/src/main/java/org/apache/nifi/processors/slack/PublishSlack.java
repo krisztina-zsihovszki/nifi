@@ -42,6 +42,8 @@ import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.ValidationContext;
+import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.Validator;
 import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
@@ -53,6 +55,7 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
+import org.apache.nifi.processors.slack.util.ChannelIDValidator;
 import org.apache.nifi.processors.slack.util.SlackResponseUtil;
 import org.apache.nifi.processors.slack.util.ChannelMapper;
 import org.apache.nifi.processors.slack.util.RateLimit;
@@ -62,6 +65,8 @@ import org.apache.nifi.util.FormatUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -264,6 +269,13 @@ public class PublishSlack extends AbstractProcessor {
         client = slackApp.client();
 
         channelMapper = new ChannelMapper(client);
+    }
+
+    @Override
+    protected Collection<ValidationResult> customValidate(final ValidationContext validationContext) {
+        List<ValidationResult> problems = new ArrayList<>(super.customValidate(validationContext));
+        problems.addAll(ChannelIDValidator.getChannelIdValidationResult(validationContext, CHANNEL));
+        return problems;
     }
 
     @OnStopped
